@@ -1,0 +1,49 @@
+<html>
+<head>
+  <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.0.min.js"></script>
+  <script src="js/jquery.simple.websocket.js"></script>
+
+</head>
+<body>
+<h1>Voip Bridge Demo</h1>
+<h3>Extension</h3>
+
+
+<input id="extension" type="text"/>
+<h3>Username</h3>
+<input id="username" type="text"/>
+<input type="submit" id="go"/>
+<section id="content"></section>
+<h3>Transfer to</h3>
+<input id="ext" type="text"/>
+<input type="submit" id="transfer"/>
+<script>
+   var ws = $.simpleWebSocket({ url: 'ws://127.0.0.1:9899/ws?ext=224&user=mark' });
+
+  ws.listen(
+      function(e) { $("#content").append(JSON.stringify(e));});
+
+  $('#go').click(function(){
+
+    /*ws.send({msg:{ operation: "connect", extension: ${"#extenion").val(), username: $("#rusername").val()}}}).done(function() {
+         alert("sent");
+     }).fail(function(e) {
+         alert("failed"); */
+
+    /// });
+
+   //ws.send({msg:{ operation: $("#extention").val(), username: $("#rusername").val()}).done(function() {
+    //    alert("sent");
+    //}).fail(function(e) {
+    //    alert("failed");
+  //  });
+
+    ;})
+    $('#transfer').click(function(){
+      // ws.send({msg: { operation: "transfer", to_ext: $("ext").val()}});
+      ws.send({msg: { operation: "transfer", to_ext: "225"}});
+
+    });
+</script>
+</body>
+</html>
