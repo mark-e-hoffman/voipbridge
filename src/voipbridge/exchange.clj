@@ -24,7 +24,29 @@
       (first (filter (fn[me] (= (:ext (val me)) ext)) @clients))
       )
 
+(defn get-client-by-user [user]
+  (first (filter (fn[me] (= (:user (val me)) user)) @clients))
+  )
+(defn chat-with [ from-user from-channel to-user message ]
+  (let [ to-ch (get-client-by-user to-user)]
+    (cond to-ch
+      (do
+        (send! (key to-ch) (write-str {:operation "chat" :user to-user :body {:from from-user :message message}}))
+        (info "chat-with" from-user to-user)
+        )
+      :else
+      (do
+        (send! from-channel (write-str {:operation "chat" :user from-user :body {:status "not found" :to to-user :message "user is not logged on"}}))
+        (warn "chat-with" from-user to-user "to user not connected")
+        )
 
+       )
+    )
+  )
+
+(defn get-clients [ from-user]
+  (map #(select-keys % [:ext :user]) (vals @clients))
+  )
 (defmulti dispatch (fn[m ch] (:operation m)))
 
 (defmethod dispatch "transfer" [m ch]
@@ -39,6 +61,36 @@
       :else
         (warn "transfer" "cannot locate client"))
 ))
+(defmethod dispatch "chat" [m ch]
+
+  (let [ client (get @clients ch)
+         to-user (:with m)
+         message (:message m)
+         from-user (:user client)]
+    (cond client
+      (do
+        (chat-with from-user ch to-user message)
+        (info "chat" "from" from-user "with" to-user))
+      :else
+      (warn "chat" "cannot locate client"))
+    ))
+
+(defmethod dispatch "list-clients" [m ch]
+
+  (let [ client (get @clients ch)
+         user (:user client)
+         users (get-clients user)
+         ]
+
+    (cond client
+      (do
+        (send! ch (write-str { :operation "list-clients" :user user :body { :status "ok" :users users}}))
+        (info "list-users" "from" :user ))
+      :else
+      (warn "list-users" "cannot locate "))
+    ))
+
+
 (defmethod dispatch :default [m ch]
     (info "dispatch" m "unrecognized operation")
   )
@@ -67,7 +119,7 @@
           user (get-in req [:params :user])
           call-back (partial ext-call-back ext)]
           (info "init-connection" ext user)
-          (swap! clients assoc ch {:ext ext :user ext :call-back call-back})
+          (swap! clients assoc ch {:ext ext :user user :call-back call-back})
           (voip/pair ext call-back)
   ))
 
@@ -101,8 +153,16 @@
               (str uri "?" qs) uri))
       resp)))
 
+(defn shutdown []
+  (warn "shutting down")
+
+  )
+(defn start-up [ port]
+  (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown))
+  (run-server (-> #'bridge site wrap-request-logging) {:port port})
+  (info "main" "server started on port" port)
+  )
 (defn -main [& [yml-file]]
   (yaml/init-yml yml-file)
   (let [port (yaml/get-cfg-value [:http :port] 8080)]
-    (run-server (-> #'bridge site wrap-request-logging) {:port port})
-    (info "main" "server started on port" port)))
+    (start-up port)))

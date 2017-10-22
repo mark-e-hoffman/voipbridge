@@ -8,40 +8,78 @@
 <h1>Voip Bridge Demo</h1>
 <h3>Extension</h3>
 
-
+<br>
+Extension
 <input id="extension" type="text"/>
 <h3>Username</h3>
 <input id="username" type="text"/>
-<input type="submit" id="go"/>
+<br>
+<input type="submit" value="connect" id="connect"/>
+<br>
 <section id="content"></section>
 <h3>Transfer to</h3>
 <input id="ext" type="text"/>
-<input type="submit" id="transfer"/>
+<input type="submit" value="transfer" id="transfer"/>
+
+<br>
+Chat
+User <input id="to_user" type="text"/>
+<br>
+Message <input id="message" type="text"/>
+<br>
+<input type="submit" value="chat" id="chat"/>
+
+<br>
+<br>
+<input type="submit" value="list_clients" id="list_clients"/>
+
+
+
+
 <script>
-   var ws = $.simpleWebSocket({ url: 'ws://127.0.0.1:9899/ws?ext=224&user=mark' });
+
+var ws;
+$('#connect').click(function() {
+  var ext = $('#extension').val();
+  var username = $('#username').val();
+
+   ws = $.simpleWebSocket({ url: 'ws://127.0.0.1:9899/ws?ext=' + ext + '&user=' + username });
 
   ws.listen(
-      function(e) { $("#content").append(JSON.stringify(e));});
+      function(e) { $("#content").append(JSON.stringify(e) + "<BR>");});
+  ws.onclose =
+    function( e) {
+        alert("got ws close");
+     }
+
+    ws.onerror =
+    function( e) {
+        alert("got ws onerror");
+     }
+
+   //  ws.forEach(function(name) {
+   //     console.log(name);
+   //  });
+
+
+ });
 
   $('#go').click(function(){
-
-    /*ws.send({msg:{ operation: "connect", extension: ${"#extenion").val(), username: $("#rusername").val()}}}).done(function() {
-         alert("sent");
-     }).fail(function(e) {
-         alert("failed"); */
-
-    /// });
-
-   //ws.send({msg:{ operation: $("#extention").val(), username: $("#rusername").val()}).done(function() {
-    //    alert("sent");
-    //}).fail(function(e) {
-    //    alert("failed");
-  //  });
-
     ;})
     $('#transfer').click(function(){
       // ws.send({msg: { operation: "transfer", to_ext: $("ext").val()}});
-      ws.send({msg: { operation: "transfer", to_ext: "225"}});
+      ws.send({msg: { operation: "transfer", to_ext: $("#ext").val()}});
+
+    });
+
+    $('#chat').click(function(){
+      // ws.send({msg: { operation: "transfer", to_ext: $("ext").val()}});
+      ws.send({msg: { operation: "chat", with: $("#to_user").val(), message: $("#message").val()}});
+
+    });
+
+     $('#list_clients').click(function(){
+      ws.send({msg: { operation: "list-clients"}});
 
     });
 </script>
