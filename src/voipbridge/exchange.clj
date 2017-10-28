@@ -157,8 +157,10 @@
   (warn "shutting down")
 
   )
+
 (defn start-up [ port]
   (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown))
+
   (run-server (-> #'bridge site wrap-request-logging) {:port port})
   (info "main" "server started on port" port)
   )

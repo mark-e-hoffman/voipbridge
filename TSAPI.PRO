@@ -33,12 +33,12 @@
 # server requests it while setting up of the encrypted connection.
 #
 # To use client certificates, provide the location of a Java key store containing
-# the private key and the client certificate, and the password for the Java key
+# the private key and the client certificate, and the password for the Java key 
 # store.
 #
 #keyStoreLocation=C:\\Avaya\\jtapi-sdk-6.3.3\\resources\\Client.jks
 #keyStorePassword=password
-#
+# 
 #
 # (Note the use of "\\" instead of "\" when specifying Windows file locations.)
 
@@ -57,4 +57,3 @@
 #
 
 [Telephony Servers]
-127.0.0.1=450

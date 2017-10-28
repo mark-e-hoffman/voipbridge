@@ -1,6 +1,7 @@
 (ns voipbridge.jtapi
   (:require [expiring-map.core :as em])
   (:require [clojure.tools.logging :as log])
+  (:require [voipbridge.yaml :as yaml])
   (:import [javax.telephony JtapiPeer JtapiPeerFactory JtapiPeerUnavailableException Provider
                             CallListener CallEvent CallObserver TerminalConnectionListener
                             TerminalConnectionEvent ConnectionListener ConnectionEvent MetaEvent])
@@ -141,6 +142,25 @@
              (swap! jtapi-provider assoc :provider p :addresses (vec (.getAddresses p)) :terminals (vec (.getTerminals p)))
      ))
 
+(defn bootstrap-with-first-service [additional-args]
+  (try
+    (let [ peer (JtapiPeerFactory/getJtapiPeer "")
+              services (.getServices peer)
+              provider-string (str (first services) additional-args)
+              _ (log/info "provider-string" provider-string)
+              p (.getProvider peer provider-string)
+              ]
+         (swap! jtapi-provider assoc :provider p :addresses (vec (.getAddresses p)))
+         )
+    (catch Exception e
+      (log/error "bootstrap-with-first-service" e)
+      )
+    ))
+
+
+(defn init-provider []
+    (eval (read-string (yaml/get-cfg-value [:jtapi :bootstrap]))))
+
 
 (defn get-callers-from-provider [ call]
   (try
@@ -200,17 +220,18 @@
   ))
 
 (defn register-listener [ ext callback-fn ]
+  (try
     (let [address (get-address ext)
           terminal (get-terminal ext)
           ]
-        ;; (.addCallListener address (reify-call-control-call-listener ext (partial call-listener-handler ext callback-fn)))
-      ;;   (.addCallListener terminal (reify-call-control-call-listener ext (partial call-listener-handler ext callback-fn)))
-      ;;   (.addCallListener terminal (reify-terminal-conn-listener ext (partial call-listener-handler ext callback-fn)))
-       ;; (.addCallListener terminal (reify-call-control-terminal-connection-listener ext (partial call-listener-handler ext callback-fn)))
-         (.addCallListener terminal (reify-terminal-conn-listener ext (partial call-listener-handler ext callback-fn)))
-       ;;  (.addCallListener address (reify-call-control-connection-listener ext (partial call-listener-handler ext callback-fn)))
-
-      ))
+      (log/info"register-listener" ext)
+      (.addCallListener terminal (reify-terminal-conn-listener ext (partial call-listener-handler ext callback-fn)))
+      )
+    (catch Exception e
+      (log/error "register-listener" ext e)
+      )
+    )
+  )
 
 
 (defn gen-implementation [ c return-type event-type ]

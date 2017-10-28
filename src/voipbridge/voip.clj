@@ -14,6 +14,13 @@
     (jtapi/bootstrap provider-string)
 )
 
+(defn  bootstrap-with-first-service [additional-args]
+    (jtapi/bootstrap-with-first-service additional-args)
+  )
+
+(defn init-provider []
+  (jtapi/init-provider)
+  )
 
 (defn pair [ext resp-fn]
   (info "pair" ext )
