@@ -18,7 +18,7 @@
 (defn get-dups[] dups)
 
 (defn debug-call [ ext n e ]
-  (log/debug ext  n  (bean e))
+  (log/debug ext n (.getID e) (bean e))
 )
 (defn reify-call-control-connection-listener [ext handler-fn]
   (log/info "reify-call-control-connection-listener" ext handler-fn)
@@ -105,30 +105,30 @@
   (log/info "reify-terminal-conn-listener" ext handler-fn)
     (reify
           TerminalConnectionListener
-        (terminalConnectionActive [ this e ](  debug-call ext "terminalConnectionActive" e) (handler-fn e))
+            (terminalConnectionActive [ this e ](  debug-call ext "terminalConnectionActive" e) (handler-fn e))
     		(terminalConnectionCreated [ this e ]( debug-call ext "terminalConnectionCreated" e))
     		(terminalConnectionDropped [ this e ]( debug-call ext "terminalConnectionDropped" e) (handler-fn e))
     		(terminalConnectionPassive [ this e ]( debug-call ext "terminalConnectionPassive" e))
-    		(terminalConnectionRinging [ this e ]( debug-call ext "terminalConnectionRinging" e) (handler-fn e))
+    		(terminalConnectionRinging [ this e ]( debug-call ext "terminalConnectionRinging" e))
     		(terminalConnectionUnknown [ this e ]( debug-call ext "terminalConnectionUnknown" e))
-    		(connectionConnected [ this e ]((do ( debug-call ext "connectionConnected" e) )))
+    		(connectionConnected [ this e ](debug-call ext "connectionConnected" e))
     		(connectionCreated [ this e ]( debug-call ext "connectionCreated" e) )
     		(connectionDisconnected [ this e ]( debug-call ext "connectionDisconnected" e) (handler-fn e))
     		(connectionInProgress [ this e ]( debug-call ext "connectionInProgress" e) )
     		(connectionUnknown [ this e ]( debug-call ext "connectionUnknown" e) (handler-fn e))
     		(connectionFailed [ this e ]( debug-call ext "connectionFailed" e) (handler-fn e))
-    		(connectionAlerting [ this e ]( debug-call ext "connectionAlerting" e) (handler-fn e))
+    		(connectionAlerting [ this e ]( debug-call ext "connectionAlerting" e))
     		(callInvalid [ this e ]( debug-call ext "callInvalid" e) (handler-fn e))
-    		(callEventTransmissionEnded [ this e ] ((do (debug-call ext "callEventTransmissionEnded" e (handler-fn e)))))
-    		(singleCallMetaProgressStarted [ this e ]( debug-call ext "singleCallMetaProgressStarted" e) (handler-fn e))
-    		(singleCallMetaProgressEnded [ this e ]( debug-call ext "singleCallMetaProgressEnded" e) (handler-fn e))
-    		(singleCallMetaSnapshotStarted [ this e ]( debug-call ext "singleCallMetaSnapshotStarted" e) (handler-fn e))
-    		(singleCallMetaSnapshotEnded [ this e ]( debug-call ext "singleCallMetaSnapshotEnded" e) (handler-fn e))
-    		(multiCallMetaMergeStarted [ this e ]( debug-call ext "multiCallMetaMergeStarted" e) (handler-fn e))
-    		(multiCallMetaMergeEnded [ this e ]( debug-call ext "multiCallMetaMergeEnded" e) (handler-fn e))
-    		(multiCallMetaTransferStarted [ this e ]( debug-call ext "multiCallMetaTransferStarted" e) (handler-fn e))
-    		(multiCallMetaTransferEnded [ this e ]( debug-call ext "multiCallMetaTransferEnded" e) (handler-fn e))
-    		(callActive [ this e ]( debug-call ext "callActive" e))
+    		(callEventTransmissionEnded [ this e ]  (handler-fn e))
+    		(singleCallMetaProgressStarted [ this e ]( debug-call ext "singleCallMetaProgressStarted" e))
+    		(singleCallMetaProgressEnded [ this e ]( debug-call ext "singleCallMetaProgressEnded" e))
+    		(singleCallMetaSnapshotStarted [ this e ]( debug-call ext "singleCallMetaSnapshotStarted" e))
+    		(singleCallMetaSnapshotEnded [ this e ]( debug-call ext "singleCallMetaSnapshotEnded" e))
+    		(multiCallMetaMergeStarted [ this e ]( debug-call ext "multiCallMetaMergeStarted" e))
+    		(multiCallMetaMergeEnded [ this e ]( debug-call ext "multiCallMetaMergeEnded" e))
+    		(multiCallMetaTransferStarted [ this e ]( debug-call ext "multiCallMetaTransferStarted" e))
+    		(multiCallMetaTransferEnded [ this e ]( debug-call ext "multiCallMetaTransferEnded" e))
+    		(callActive [ this e ]( debug-call ext "callActive" e) (handler-fn e))
     ))
 
 (defn- get-addresses [provider]
@@ -188,25 +188,25 @@
      (first (filter (fn[c] (= ext (.getName (.getAddress c))))
                     (.getConnections call)))
   )
-(defmulti transform-event (fn[event ext] (.getClass event)))
+(defmulti transform-event (fn[event ext] (.getID event)))
 
-(defmethod transform-event javax.telephony.events.TermConnActiveEv [event ext]
-  (log/info "transform-event" "TermConnActiveEv" ext)
+(defmethod transform-event 115 [event ext]
+  (log/info "transform-event" "TerminalConnectionEvent" ext)
   (let [ call (.getCall event )
         callers (get-callers-from-provider call)
          ]
     (log/info "transform-event!" "TermConnActiveEv" "callers" callers)
     (swap! jtapi-provider assoc-in [:calls ext ] call)
-    {:operation "call" :ext ext :body {:cause (.getCause event) :meta-code (.getMetaCode event) :callers callers}}
+    {:operation "call" :ext ext :body {:id (.getID event) :callers callers}}
     ))
 
 
-(defmethod transform-event javax.telephony.events.TermConnDroppedEv [event ext]
+(defmethod transform-event 117 [event ext]
         (swap! jtapi-provider assoc-in [:calls ext] nil)
-        {:operation "hangup" :ext ext :body {:cause (.getCause event) :meta-code (.getMetaCode event)}}
+        {:operation "hangup" :ext ext :body {:id(.getID event)}}
 )
 (defmethod transform-event :default [event ext]
-  (log/warn "transform-event" "default" ext event)
+  (log/warn "transform-event" "default" ext (.getID event ) event)
   )
 
 (defn call-listener-handler [ ext callback-fn event]
@@ -254,10 +254,12 @@
               ;;; (Thread/sleep 2000)
               ;;; (.drop ccc)
               (log/info "transfer" "completed" to from)
-                  {:operation "transfer" :ext from :body {:status "success" :to to}}
+              {:operation "transfer" :ext from :body {:status "success" :to to}}
             )))
     (catch Exception e
       (log/error "transfer" e)
+      (log/error "transfer" (.getStackTrace() e))
+      {:operation "transfer" :ext from :body {:status "failed" :to to }}
       )
     )
   )
