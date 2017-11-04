@@ -9,13 +9,11 @@
                  [org.clojure/java.jdbc "0.3.2"]
                  [clj-time "0.9.0"]
                  [clj-yaml "0.4.0"]
-                 [com.avaya/jtapi "7.1.0"]
-
+        ;;         [com.avaya/jtapi "7.1.0"]
                  [javax.telephony/javax-telephony "1.4.0"]
                  ;;;[org.asteriskjava/asterisk-java "1.0.0-m2"]
                  ;;; [org.asteriskjava/asterisk-jtapi "0.2.0"]
                  [javax.sip/jain-sip-api "1.2.1.4"]
-                 ;; https://mvnrepository.com/artifact/javax.csapi.cc/jcc
                  [javax.csapi.cc/jcc "1.1"]
                  [expiring-map "0.1.8"]
                  [javax.jcat/jcat "0.3.1"]
