@@ -17,9 +17,17 @@ Extension
 <input type="submit" value="connect" id="connect"/>
 <br>
 <section id="content"></section>
-<h3>Transfer to</h3>
+<h3>Transfer from</h3>
+<input id="from" type="text"/>
+ to
 <input id="ext" type="text"/>
 <input type="submit" value="transfer" id="transfer"/>
+
+<h3>Warm Transfer from</h3>
+<input id="warm_from" type="text"/>
+to
+<input id="warm_ext" type="text"/>
+<input type="submit" value="Warm Transfer" id="warm_transfer"/>
 
 <br>
 Chat
@@ -32,6 +40,18 @@ Message <input id="message" type="text"/>
 <br>
 <br>
 <input type="submit" value="list_clients" id="list_clients"/>
+<br>
+<input type="text" id="hold_ext"/>
+<input type="submit" value="Hold Call" id="hold"/>
+<input type="submit" value="Un-Hold Call" id="unhold"/>
+
+<br>
+<input type="text" id="who_calling"/>
+<input type="submit" value="Make Call" id="call"/>
+<br>
+<input type="text" id="who_to_hangup"/>
+<input type="submit" value="Hangup" id="hangup"/>
+
 
 
 
@@ -67,13 +87,39 @@ $('#connect').click(function() {
   $('#go').click(function(){
     ;})
     $('#transfer').click(function(){
-      // ws.send({msg: { operation: "transfer", to_ext: $("ext").val()}});
-      ws.send({msg: { operation: "transfer", to_ext: $("#ext").val()}});
+
+      ws.send({msg: { operation: "transfer", from: $("#from").val(), to_ext: $("#ext").val()}});
 
     });
 
+     $('#warm_transfer').click(function(){
+      ws.send({msg: { operation: "warm-transfer", from: $("#warm_from").val(), to_ext: $("#warm_ext").val()}});
+
+    });
+     $('#call').click(function(){
+
+      ws.send({msg: { operation: "call", to_ext: $("#who_calling").val()}});
+
+    });
+  $('#hold').click(function(){
+
+      ws.send({msg: { operation: "hold-call", to_ext: $("#hold_ext").val()}});
+
+    });
+
+     $('#unhold').click(function(){
+
+      ws.send({msg: { operation: "unhold-call", to_ext: $("#hold_ext").val()}});
+
+    });
+
+     $('#hangup').click(function(){
+
+      ws.send({msg: { operation: "hangup", to_ext: $("#who_to_hangup").val()}});
+
+    });
     $('#chat').click(function(){
-      // ws.send({msg: { operation: "transfer", to_ext: $("ext").val()}});
+
       ws.send({msg: { operation: "chat", with: $("#to_user").val(), message: $("#message").val()}});
 
     });

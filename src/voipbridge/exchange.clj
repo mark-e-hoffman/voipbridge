@@ -52,15 +52,81 @@
 (defmethod dispatch "transfer" [m ch]
 
   (let [ client (get @clients ch)
+         from (:from m)
          to-ext (:to_ext m)
          ext (:ext client)]
     (cond client
       (do
-           (voip/transfer ext to-ext)
-           (info "transfer" "from" ext "to" to-ext))
+           (voip/transfer ext from to-ext)
+           (info "transfer" "from" ext "from" from "to" to-ext))
       :else
         (warn "transfer" "cannot locate client"))
 ))
+
+(defmethod dispatch "warm-transfer" [m ch]
+
+  (let [ client (get @clients ch)
+         from (:from m)
+         to-ext (:to_ext m)
+         ext (:ext client)]
+    (cond client
+      (do
+        (voip/warm-transfer ext from to-ext)
+        (info "warm-transfer" "from" ext "from" from "to" to-ext))
+      :else
+      (warn "warm-transfer" "cannot locate client"))
+    ))
+
+(defmethod dispatch "call" [m ch]
+
+  (let [ client (get @clients ch)
+         to-ext (:to_ext m)
+         ext (:ext client)]
+    (cond client
+      (do
+        (voip/call ext to-ext)
+        (info "call" "from" ext "to" to-ext))
+      :else
+      (warn "call" "cannot locate client"))
+    ))
+(defmethod dispatch "hold-call" [m ch]
+
+  (let [ client (get @clients ch)
+         to-ext (:to_ext m)
+         ext (:ext client)]
+    (cond client
+      (do
+        (voip/hold-call ext to-ext)
+        (info "hold-call" "from" ext "to" to-ext))
+      :else
+      (warn "hold-call" "cannot locate client"))
+    ))
+(defmethod dispatch "unhold-call" [m ch]
+
+  (let [ client (get @clients ch)
+         to-ext (:to_ext m)
+         ext (:ext client)]
+    (cond client
+      (do
+        (voip/unhold-call ext to-ext)
+        (info "unhold-call" "from" ext "to" to-ext))
+      :else
+      (warn "unhold-call" "cannot locate client"))
+    ))
+
+(defmethod dispatch "hangup" [m ch]
+
+  (let [ client (get @clients ch)
+         to-ext (:to_ext m)
+         ext (:ext client)]
+    (cond client
+      (do
+        (voip/hangup ext to-ext)
+        (info "hangup" "from" ext "to" to-ext))
+      :else
+      (warn "hangup" "cannot locate client"))
+    ))
+
 (defmethod dispatch "chat" [m ch]
 
   (let [ client (get @clients ch)
@@ -158,9 +224,10 @@
 
   )
 
-(defn start-up [ port]
-  (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown))
+(defn start-up [port]
 
+  (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown))
+  (voip/init-provider)
   (run-server (-> #'bridge site wrap-request-logging) {:port port})
   (info "main" "server started on port" port)
   )

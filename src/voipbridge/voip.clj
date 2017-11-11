@@ -38,13 +38,45 @@
         (call-back {:operation "un-pair" :ext ext :body {:status "ok"}})))
   )
 
-(defn transfer [ext to-ext]
-  (info "transfer" ext "to" to-ext)
+(defn transfer [ext from to]
+  (info "transfer" ext "from" from "to" to)
     (let [call-back (get-in @pairs [ext :call-back])]
       (async/go
-        (call-back (jtapi/transfer ext to-ext))))
+        (call-back (jtapi/transfer ext from to))))
 )
 
+(defn warm-transfer [ext from to]
+  (info "warm-transfer" ext "from" from "to" to)
+  (let [call-back (get-in @pairs [ext :call-back])]
+    (async/go
+     (call-back (jtapi/warm-transfer ext from to))))
+  )
+
+(defn call [ext to-ext]
+  (info "call" ext "to" to-ext)
+  (let [call-back (get-in @pairs [ext :call-back])]
+    (async/go
+     (call-back (jtapi/call ext to-ext))))
+  )
+(defn hold-call [ext to-ext]
+  (info "hold-call" ext to-ext)
+  (let [call-back (get-in @pairs [ext :call-back])]
+    (async/go
+     (call-back (jtapi/hold-call ext to-ext))))
+  )
+
+(defn unhold-call [ext to-ext]
+  (info "hold-call" ext to-ext)
+  (let [call-back (get-in @pairs [ext :call-back])]
+    (async/go
+     (call-back (jtapi/unhold-call ext to-ext))))
+  )
+(defn hangup [ext to-ext]
+  (info "hangup" ext to-ext)
+  (let [call-back (get-in @pairs [ext :call-back])]
+    (async/go
+     (call-back (jtapi/hangup ext to-ext))))
+  )
 (defn get-pairs []
   @pairs
   )

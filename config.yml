@@ -2,4 +2,5 @@ http :
    port : 8080
 
 jtapi:
-   bootstrap: (voip/bootstrap-with-first-service ";login=aessim;passwd=AESsim123#")
+##   bootstrap: (voip/bootstrap-with-first-service ";login=aessim;passwd=AESsim123#")
+    bootstrap: (voip/bootstrap "Emulator")

@@ -1,13 +1,14 @@
 (ns voipbridge.jtapi
   (:require [expiring-map.core :as em])
   (:require [clojure.tools.logging :as log])
+  (:require [clojure.stacktrace :as st])
   (:require [voipbridge.yaml :as yaml])
-  (:import [javax.telephony JtapiPeer JtapiPeerFactory JtapiPeerUnavailableException Provider
+  (:import [javax.telephony Connection JtapiPeer JtapiPeerFactory JtapiPeerUnavailableException Provider
                             CallListener CallEvent CallObserver TerminalConnectionListener
                             TerminalConnectionEvent ConnectionListener ConnectionEvent MetaEvent])
   (:import [javax.telephony.callcontrol CallControlCall CallControlCallListener CallControlConnectionListener
                                       CallControlConnectionEvent CallControlTerminalConnectionListener
-                                    CallControlTerminalConnectionEvent])
+                                    CallControlTerminalConnectionEvent CallControlTerminalConnection])
   (:import [javax.telephony.events TermConnActiveEv CallObservationEndedEv ]))
 
 
@@ -134,6 +135,9 @@
 (defn- get-addresses [provider]
       (.getAddresses provider))
 
+(defn log-state [ msg o ]
+  (log/info "state-of" msg (.getState o) o)
+  )
 (defn bootstrap [provider-string]
     (let [ peer (JtapiPeerFactory/getJtapiPeer "")
               services (.getServices peer)
@@ -162,7 +166,8 @@
     (eval (read-string (yaml/get-cfg-value [:jtapi :bootstrap]))))
 
 
-(defn get-callers-from-provider [ call]
+(defn get-callers-from-call [ call]
+
   (try
     (let [ ccc (cast CallControlCall call)
            calling (.getName (.getCallingAddress ccc))
@@ -173,7 +178,8 @@
       )
 
     (catch Exception e
-      (log/error "get-callers" e)
+      (log/error "get-callers-from-call" e)
+      (log/error "get-callers" (with-out-str (st/print-stack-trace e)))
       )
     )
   )
@@ -188,22 +194,33 @@
      (first (filter (fn[c] (= ext (.getName (.getAddress c))))
                     (.getConnections call)))
   )
+
+(defn call-answered? [conns ]
+  (every? (fn [c] (= Connection/CONNECTED (.getState c))) conns)
+  )
+
 (defmulti transform-event (fn[event ext] (.getID event)))
 
 (defmethod transform-event 115 [event ext]
   (log/info "transform-event" "TerminalConnectionEvent" ext)
   (let [ call (.getCall event )
-        callers (get-callers-from-provider call)
+         _ (log-state "115" call)
+         answered (call-answered? (.getConnections call))
+         callers (get-callers-from-call call)
          ]
     (log/info "transform-event!" "TermConnActiveEv" "callers" callers)
-    (swap! jtapi-provider assoc-in [:calls ext ] call)
-    {:operation "call" :ext ext :body {:id (.getID event) :callers callers}}
-    ))
+    (if answered ;; only bother to bubble up event if both parties are connected
+      {:operation "call" :ext ext :body {:id (.getID event) :callers callers}})))
+
+
 
 
 (defmethod transform-event 117 [event ext]
-        (swap! jtapi-provider assoc-in [:calls ext] nil)
-        {:operation "hangup" :ext ext :body {:id(.getID event)}}
+      (let [ call (.getCall event )]
+        (if (not (nil? call))
+            {:operation "hangup" :ext ext :body {:id(.getID event) :callers (get-callers-from-call call)}})
+        )
+       ;;  (swap! jtapi-provider assoc-in [:calls ext] nil)
 )
 (defmethod transform-event :default [event ext]
   (log/warn "transform-event" "default" ext (.getID event ) event)
@@ -219,6 +236,35 @@
         (em/assoc! dups msg msg)))
   ))
 
+(defn get-call-from-conn
+  [ conn from to ]
+  (let [ call (.getCall conn )]
+    (let [ connections (.getConnections call)]
+      (first (for [ conn connections
+                    :when (= to (.getName (.getAddress conn)))]
+               call
+               ))
+      )
+    )
+  )
+
+(defn get-call
+  [ from to ]
+  (let [ connections (.getConnections (get-address from))]
+    (first (for [ conn connections
+                  :let [ call (get-call-from-conn conn from to)]
+                  :when (not (nil? call))]
+             call
+             ))
+    )
+  )
+(defn get-my-terminal-connection [ me terminal-conns]
+  (doseq [ c terminal-conns]
+    (log/info "get-my-terminal" c (.getName (.getTerminal c)))
+    )
+
+  (first (filter (fn[c] (= me (.getName (.getTerminal c)))) terminal-conns))
+  )
 (defn register-listener [ ext callback-fn ]
   (try
     (let [address (get-address ext)
@@ -229,6 +275,7 @@
       )
     (catch Exception e
       (log/error "register-listener" ext e)
+      (log/error "register-listener" (with-out-str(st/print-stack-trace e)))
       )
     )
   )
@@ -238,28 +285,159 @@
   (map #(println % ) (map #(str "\t\t(^" return-type " " % " [ this ^" event-type " e ]((debug-call \"" % "\" e) (handler-fn e)))") (map #(.getName %) (.getMethods c))))
   )
 
-(defn transfer [ from to ]
-  (log/info "transfer" "started" from to)
+
+(defn unhold-call [ me from ]
+  (log/info "unhold-call" me from )
   (try
-    (let [ call (get-in @jtapi-provider [:calls from]) ]
+    (let [ call (get-call me from)]
+      (cond (nil? call)
+        {:operation "unhold-call" :ext from :body {:status "failed" :reason "no active call"}}
+        :else
+        (let [ c (get-connection-from-call call me)
+               terminal-conn (first (.getTerminalConnections c ))
+               cctc (cast CallControlTerminalConnection terminal-conn)
+               ]
+          (.unhold cctc)
+          (log/info "unhold"  from)
+          {:operation "unhold-call" :ext me :body {:status "success" :ext from}}
+          )))
+    (catch Exception e
+      (log/error "unhold-call" e)
+      (log/error "unhold-call" (with-out-str(st/print-stack-trace e)))
+      {:operation "hold-call" :ext me :body {:status "failed" :ext from }}
+      )
+    )
+  )
+
+
+(defn hold-call [ me from ]
+  (log/info "hold-call" me from )
+  (try
+    (let [ call (get-call me from)]
+      (cond (nil? call)
+        {:operation "hold-call" :ext from :body {:status "failed" :reason "no active call"}}
+        :else
+        (let [ c (get-connection-from-call call me)
+               terminal-conn (get-my-terminal-connection me (.getTerminalConnections c ))
+               _ (log/info "hold-call" terminal-conn)
+               cctc (cast CallControlTerminalConnection terminal-conn)
+               ]
+          (.hold cctc)
+          (log/info "hold"  from)
+          {:operation "hold-call" :ext me :body {:status "success" :ext from}}
+          )))
+    (catch Exception e
+      (log/error "hold-call" e)
+      (log/error "hold-call" (with-out-str(st/print-stack-trace e)))
+      {:operation "hold-call" :ext me :body {:status "failed" :ext from }}
+      )
+    )
+  )
+
+(defn hangup [ me from ]
+  (log/info "hangup" me from )
+  (try
+    (let [ call (get-call me from)]
+      (cond (nil? call)
+        {:operation "hangup" :ext from :body {:status "failed" :reason "no active call"}}
+        :else
+        (let [ c (get-connection-from-call call from)
+               ;;; terminal-conn (first (.getTerminalConnections c ))
+               ccc (cast CallControlCall call)
+               ]
+         ;;; (log/warn "hangup" "terminal-conn" terminal-conn)
+         ;;; (log/warn "hangup" "cctc" cctc)
+          (.drop ccc)
+          (log/info "hangup" me from)
+          {:operation "hangup" :ext me :body {:status "success" :ext from}}
+          )))
+    (catch Exception e
+      (log/error "hangup" e)
+      (log/error "hangup" (with-out-str(st/print-stack-trace e)))
+      {:operation "hangup" :ext me :body {:status "failed" :ext from }}
+      )
+    )
+  )
+
+(defn warm-transfer [ me from to]
+  (log/info "warm-transfer" "started" me from to)
+  (try
+    (let [ call1 (get-call me from)
+           call2 (get-call me to)
+           ]
+      (cond (nil? call1)
+         {:operation "warm-transfer" :ext from :body {:status "failed" :reason "from call not active"}}
+        (nil? call2)
+          {:operation "warm-transfer" :ext from :body {:status "failed" :reason "to call not active"}}
+        :else
+          (let [ c (get-connection-from-call call1 me)
+               _ (log-state "warm-transfer" c)
+               _ (log/info "warm-transfer" "conn" (.getName (.getAddress c)))
+               terminal-conn (first (.getTerminalConnections c ))
+               _ (log-state "warm-transfer" terminal-conn)
+               ccc (cast CallControlCall call1)
+               ]
+          (.setTransferController ccc terminal-conn)
+          (.transfer ccc call2)
+          ;;; (Thread/sleep 2000)
+          ;;; (.drop ccc)
+          (log/info "warm-transfer" "completed" me from to)
+          {:operation "warm-transfer" :ext me :body {:status "success" :from from :to to}}
+          )))
+    (catch Exception e
+      (log/error "warm-transfer" e)
+      (log/error "warm-transfer" (with-out-str (st/print-stack-trace e)))
+      {:operation "warm-transfer" :ext from :body {:status "failed" :to to }}
+      )
+    )
+  )
+
+(defn transfer [ me from to ]
+  (log/info "transfer" "started" me from to)
+  (try
+    (let [ call (get-call me from)]
          (cond (nil? call)
             {:operation "transfer" :ext from :body {:status "failed" :reason "no active call"}}
           :else
-            (let [ c (get-connection-from-call call from)
+            (let [ c (get-connection-from-call call me)
+                   _ (log-state "transfer" c)
+                   _ (log/info "transfer" "conn" (.getName (.getAddress c)))
                   terminal-conn (first (.getTerminalConnections c ))
+                   _ (log-state "transfer" terminal-conn)
                   ccc (cast CallControlCall call)
                    ]
                   (.setTransferController ccc terminal-conn)
                   (.transfer ccc to)
               ;;; (Thread/sleep 2000)
               ;;; (.drop ccc)
-              (log/info "transfer" "completed" to from)
-              {:operation "transfer" :ext from :body {:status "success" :to to}}
+              (log/info "transfer" "completed" me from to)
+              {:operation "transfer" :ext me :body {:status "success" :from from :to to}}
             )))
     (catch Exception e
       (log/error "transfer" e)
-      (log/error "transfer" (.getStackTrace() e))
+      (log/error "transfer" (with-out-str (st/print-stack-trace e)))
       {:operation "transfer" :ext from :body {:status "failed" :to to }}
       )
     )
   )
+
+
+(defn call [ from to ]
+  (log/info "call" "started" from to)
+  (try
+    (let [
+           call (.createCall (:provider @jtapi-provider))
+           _ (log-state "call" call)
+           conn (.connect call (get-terminal from) (get-address from) to)
+           ]
+
+          {:operation "call" :ext from :body {:status "initiated" :to to}}
+          )
+    (catch Exception e
+      (log/error "call" e)
+      (log/error "call" (with-out-str(st/print-stack-trace e)))
+      {:operation "call" :ext from :body {:status "failed" :to to }}
+      ))
+
+    )
+
